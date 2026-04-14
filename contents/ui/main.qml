@@ -36,13 +36,37 @@ PlasmoidItem {
         return !!taskData(row, TaskManager.AbstractTasksModel.IsWindow);
     }
 
-    function isLauncherLike(row: int): bool {
-        return !!taskData(row, TaskManager.AbstractTasksModel.IsLauncher)
-            || !!taskData(row, TaskManager.AbstractTasksModel.IsStartup);
+    function isPinnedRow(row: int): bool {
+        return !!taskData(row, TaskManager.AbstractTasksModel.IsLauncher);
+    }
+
+    function isTaskPinned(row: int): bool {
+        const url = taskData(row, TaskManager.AbstractTasksModel.LauncherUrlWithoutIcon);
+        if (!url) return false;
+        const urlStr = url.toString();
+        return tasksModel.launcherList.some(l => l === urlStr);
+    }
+
+    function savePinnedConfig(): void {
+        Plasmoid.configuration.pinnedOrder = JSON.stringify(tasksModel.launcherList);
+    }
+
+    function togglePin(row: int): void {
+        const url = taskData(row, TaskManager.AbstractTasksModel.LauncherUrlWithoutIcon);
+        if (!url || url.toString() === "") return;
+        if (isTaskPinned(row) || isPinnedRow(row)) {
+            tasksModel.requestRemoveLauncher(url);
+        } else {
+            tasksModel.requestAddLauncher(url);
+        }
     }
 
     function isVisibleTaskRow(row: int): bool {
-        if (isLauncherLike(row)) {
+        // Show pinned launchers (not transient startup entries)
+        if (taskData(row, TaskManager.AbstractTasksModel.IsLauncher)) {
+            return true;
+        }
+        if (taskData(row, TaskManager.AbstractTasksModel.IsStartup)) {
             return false;
         }
         if (isGroupTask(row)) {
@@ -58,6 +82,9 @@ PlasmoidItem {
     }
 
     function rowSecondaryText(row: int): string {
+        if (isPinnedRow(row)) {
+            return "";
+        }
         if (!isGroupTask(row)) {
             return "";
         }
@@ -71,7 +98,9 @@ PlasmoidItem {
             if (!isVisibleTaskRow(i)) {
                 continue;
             }
-            if (isGroupTask(i)) {
+            if (isPinnedRow(i)) {
+                count += 1;
+            } else if (isGroupTask(i)) {
                 count += childCountFor(i);
             } else {
                 ++count;
@@ -80,13 +109,51 @@ PlasmoidItem {
         return count;
     }
 
+    function isRowPinned(row: int): bool {
+        return isPinnedRow(row) || isTaskPinned(row);
+    }
+
     function rebuildVisibleRows(): void {
         visibleRowsModel.clear();
+        // All pinned items first — both not-running launchers and running pinned tasks.
         for (let i = 0; i < tasksModel.count; ++i) {
-            if (!isVisibleTaskRow(i)) {
-                continue;
+            if (isVisibleTaskRow(i) && isRowPinned(i)) {
+                visibleRowsModel.append({ sourceRow: i });
             }
-            visibleRowsModel.append({ sourceRow: i });
+        }
+        // Unpinned running tasks below.
+        for (let i = 0; i < tasksModel.count; ++i) {
+            if (isVisibleTaskRow(i) && !isRowPinned(i)) {
+                visibleRowsModel.append({ sourceRow: i });
+            }
+        }
+    }
+
+    // Count how many of the current visible rows are pinned.
+    function visiblePinnedCount(): int {
+        let count = 0;
+        for (let i = 0; i < visibleRowsModel.count; ++i) {
+            if (isRowPinned(visibleRowsModel.get(i).sourceRow)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    // After reordering pinned items, write the new order back to launcherList
+    // so it survives closing and reopening the dropdown (and shell restarts).
+    function persistPinnedOrder(): void {
+        const urls = [];
+        for (let i = 0; i < visibleRowsModel.count; ++i) {
+            const row = visibleRowsModel.get(i).sourceRow;
+            if (!isPinnedRow(row)) continue;
+            const url = taskData(row, TaskManager.AbstractTasksModel.LauncherUrlWithoutIcon);
+            if (url && url.toString()) {
+                urls.push(url.toString());
+            }
+        }
+        if (urls.length > 0) {
+            tasksModel.launcherList = urls;
         }
     }
 
@@ -137,6 +204,13 @@ PlasmoidItem {
 
     function activateTask(row: int): void {
         const idx = modelIndexFor(row);
+
+        // Pinned launcher: just activate (launches if not running)
+        if (isPinnedRow(row)) {
+            tasksModel.requestActivate(idx);
+            dropdown.visible = false;
+            return;
+        }
 
         if (isGroupTask(row)) {
             const childTotal = tasksModel.rowCount(idx);
@@ -238,12 +312,37 @@ PlasmoidItem {
             root.refreshUiFromModel();
         }
 
+        function onLauncherListChanged(): void {
+            root.savePinnedConfig();
+        }
+
         function onActiveTaskChanged(): void {
             root.refreshUiFromModel();
+            // Close only when a window actually gains focus (not when all windows
+            // lose focus, e.g. when the dropdown itself opens).
+            if (dropdown.visible) {
+                for (let i = 0; i < tasksModel.count; ++i) {
+                    if (root.taskData(i, TaskManager.AbstractTasksModel.IsActive)) {
+                        dropdown.visible = false;
+                        break;
+                    }
+                }
+            }
         }
     }
 
-    Component.onCompleted: refreshUiFromModel()
+    Component.onCompleted: {
+        // Restore pinned launchers saved from a previous session.
+        try {
+            const saved = JSON.parse(Plasmoid.configuration.pinnedOrder || "[]");
+            for (const url of saved) {
+                if (url) tasksModel.requestAddLauncher(url);
+            }
+        } catch (e) {
+            console.warn("Failed to restore pinned apps:", e);
+        }
+        refreshUiFromModel();
+    }
 
     Item {
         anchors.fill: parent
@@ -299,22 +398,120 @@ PlasmoidItem {
                 reuseItems: false
                 spacing: Kirigami.Units.smallSpacing / 2
 
-                delegate: TaskDropdownRow {
+                displaced: Transition {
+                    NumberAnimation {
+                        properties: "y"
+                        duration: Kirigami.Units.shortDuration
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                delegate: Item {
+                    id: delegateItem
+                    required property int index
                     required property int sourceRow
 
-                    property int taskRow: sourceRow
-
                     width: listView.width
-                    height: implicitHeight
-                    visible: true
+                    height: taskRow.implicitHeight
 
-                    title: root.rowTitle(taskRow)
-                    secondaryText: root.rowSecondaryText(taskRow)
-                    iconSource: root.taskData(taskRow, Qt.DecorationRole)
-                    active: !!root.taskData(taskRow, TaskManager.AbstractTasksModel.IsActive)
+                    property int taskModelRow: sourceRow
+                    property int dragFromIndex: -1
 
-                    onClicked: sourceItem => root.showWindowChooser(taskRow, sourceItem)
-                    onRightClicked: sourceItem => root.showContextMenu(taskRow, sourceItem)
+                    // Reparent to listView while dragging so the item floats freely.
+                    states: State {
+                        when: dragHandle.drag.active
+                        ParentChange {
+                            target: delegateItem
+                            parent: listView
+                        }
+                        AnchorChanges {
+                            target: delegateItem
+                            anchors.horizontalCenter: undefined
+                            anchors.verticalCenter: undefined
+                        }
+                    }
+
+                    TaskDropdownRow {
+                        id: taskRow
+                        width: delegateItem.width
+                        title: root.rowTitle(delegateItem.taskModelRow)
+                        secondaryText: root.rowSecondaryText(delegateItem.taskModelRow)
+                        iconSource: root.taskData(delegateItem.taskModelRow, Qt.DecorationRole)
+                        active: !!root.taskData(delegateItem.taskModelRow, TaskManager.AbstractTasksModel.IsActive)
+                        pinned: root.isRowPinned(delegateItem.taskModelRow)
+                        dragging: dragHandle.drag.active
+
+                        onClicked: sourceItem => root.showWindowChooser(delegateItem.taskModelRow, sourceItem)
+                        onRightClicked: sourceItem => root.showContextMenu(delegateItem.taskModelRow, sourceItem)
+                    }
+
+                    // Drag handle — press and move to reorder
+                    MouseArea {
+                        id: dragHandle
+
+                        property int pinnedCount: 0
+                        property bool itemIsPinned: false
+
+                        width: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing * 2
+                        height: parent.height
+                        anchors.right: parent.right
+                        anchors.rightMargin: Kirigami.Units.smallSpacing
+
+                        hoverEnabled: true
+                        cursorShape: drag.active ? Qt.ClosedHandCursor : (containsMouse ? Qt.OpenHandCursor : Qt.ArrowCursor)
+
+                        drag.target: delegateItem
+                        drag.axis: Drag.YAxis
+                        // Constrain drag within the same group (pinned vs running)
+                        // so pins never sink below running tasks and vice-versa.
+                        drag.minimumY: dragHandle.itemIsPinned
+                            ? 0
+                            : dragHandle.pinnedCount * (delegateItem.height + listView.spacing)
+                        drag.maximumY: dragHandle.itemIsPinned
+                            ? Math.max(0, dragHandle.pinnedCount - 1) * (delegateItem.height + listView.spacing)
+                            : listView.contentHeight - delegateItem.height
+
+                        onPressed: {
+                            delegateItem.dragFromIndex = delegateItem.index;
+                            dragHandle.pinnedCount = root.visiblePinnedCount();
+                            dragHandle.itemIsPinned = root.isRowPinned(delegateItem.taskModelRow);
+                        }
+
+                        onReleased: {
+                            if (!drag.active) {
+                                return;
+                            }
+                            const rowHeight = delegateItem.height + listView.spacing;
+                            const centreY = delegateItem.y + delegateItem.height / 2;
+                            let toIndex = Math.max(0, Math.min(
+                                visibleRowsModel.count - 1,
+                                Math.floor(centreY / rowHeight)
+                            ));
+
+                            // Hard-clamp: pinned items stay in the pinned section,
+                            // unpinned items stay below it — regardless of where
+                            // the cursor ended up (drag constraints can drift after
+                            // the parent-change state transition).
+                            if (dragHandle.itemIsPinned) {
+                                toIndex = Math.min(toIndex, dragHandle.pinnedCount - 1);
+                            } else {
+                                toIndex = Math.max(toIndex, dragHandle.pinnedCount);
+                            }
+
+                            // Reset position BEFORE moving the model.
+                            delegateItem.x = 0;
+                            delegateItem.y = 0;
+
+                            if (toIndex !== delegateItem.dragFromIndex && delegateItem.dragFromIndex >= 0) {
+                                visibleRowsModel.move(delegateItem.dragFromIndex, toIndex, 1);
+                                // Persist new pin order so it survives reopening.
+                                if (dragHandle.itemIsPinned) {
+                                    root.persistPinnedOrder();
+                                }
+                            }
+                            delegateItem.dragFromIndex = -1;
+                        }
+                    }
                 }
             }
         }

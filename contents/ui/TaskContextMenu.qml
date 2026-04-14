@@ -66,6 +66,9 @@ PlasmaExtras.Menu {
     }
 
     function addQAction(action: var): void {
+        if (!action || !action.text) {
+            return;
+        }
         const item = newMenuItem(menu);
         item.action = action;
         addMenuItem(item);
@@ -155,6 +158,23 @@ PlasmaExtras.Menu {
         const hasLauncher = launcherUrl && launcherUrl.toString() !== "";
 
         if (hasLauncher) {
+            const isPinned = tasksModel.launcherList.some(l => l === launcherUrl.toString())
+                || !!get(atm.IsLauncher);
+            const pinItem = newMenuItem(menu);
+            pinItem.text = isPinned ? i18n("Unpin from List") : i18n("Pin to List");
+            pinItem.icon = isPinned ? "window-unpin" : "window-pin";
+            pinItem.clicked.connect(() => {
+                if (isPinned) {
+                    tasksModel.requestRemoveLauncher(launcherUrl);
+                } else {
+                    tasksModel.requestAddLauncher(launcherUrl);
+                }
+            });
+            addMenuItem(pinItem);
+            hasAnyItems = true;
+        }
+
+        if (hasLauncher) {
             try {
                 const placesActions = backend.placesActions(launcherUrl, false, menu);
                 const recentActions = backend.recentDocumentActions(launcherUrl, menu);
@@ -193,7 +213,9 @@ PlasmaExtras.Menu {
         }
 
         if (isWindow || isGroup) {
-            addSeparator();
+            if (hasAnyItems) {
+                addSeparator();
+            }
             const closeItem = newMenuItem(menu);
             closeItem.text = isGroup ? i18n("Close All Windows") : i18n("Close");
             closeItem.icon = "window-close";

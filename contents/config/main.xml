@@ -16,5 +16,9 @@
       <label>Icon name for the panel trigger button.</label>
       <default>view-list-tree</default>
     </entry>
+    <entry name="pinnedOrder" type="String">
+      <label>JSON array of launcher URLs representing the pinned app order.</label>
+      <default>[]</default>
+    </entry>
   </group>
 </kcfg>
