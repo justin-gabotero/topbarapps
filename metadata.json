@@ -1,0 +1,22 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "KPlugin": {
+    "Id": "dev.justin.gabotero.taskdropdown",
+    "Name": "Dropdown Task Switcher",
+    "Description": "Compact task switcher with a dropdown list of open windows",
+    "Icon": "view-list-tree",
+    "Category": "Windows and Tasks",
+    "License": "",
+    "Authors": [
+      {
+        "Name": "justin-gabotero",
+        "Email": ""
+      }
+    ],
+    "EnabledByDefault": true
+  },
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "X-Plasma-Provides": [
+    "org.kde.plasma.multitasking"
+  ]
+}

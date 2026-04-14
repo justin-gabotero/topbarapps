@@ -1,0 +1,15 @@
+# KDE / editor artifacts
+*.swp
+*.swo
+*~
+.DS_Store
+
+# QML cache artifacts (if generated)
+*.qmlc
+*.jsc
+
+# Build or temp folders
+build/
+dist/
+
+scripts/

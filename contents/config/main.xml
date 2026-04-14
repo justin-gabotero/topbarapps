@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+      http://www.kde.org/standards/kcfg/1.0/kcfg.xsd" >
+  <kcfgfile name=""/>
+
+  <group name="General">
+    <entry name="maxVisibleRows" type="Int">
+      <label>Maximum visible rows in the dropdown before scrolling.</label>
+      <default>8</default>
+      <min>3</min>
+      <max>20</max>
+    </entry>
+    <entry name="triggerIcon" type="String">
+      <label>Icon name for the panel trigger button.</label>
+      <default>view-list-tree</default>
+    </entry>
+  </group>
+</kcfg>
