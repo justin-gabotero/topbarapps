@@ -31,7 +31,7 @@ PlasmaExtras.Menu {
         return PlasmaExtras.Menu.TopPosedLeftAlignedPopup;
     }
 
-    minimumWidth: visualParent ? visualParent.width : 0
+    minimumWidth: menuWidthFor(visualParent)
 
     onStatusChanged: {
         if (status === PlasmaExtras.Menu.Closed) {
@@ -43,7 +43,11 @@ PlasmaExtras.Menu {
         return tasksModel.data(modelIndex, role);
     }
 
-    function newMenuItem(parent: QtObject): PlasmaExtras.MenuItem {
+    function menuWidthFor(obj: var): real {
+        return (obj && obj["width"] !== undefined) ? Number(obj["width"]) : 0;
+    }
+
+    function newMenuItem(parent: QtObject): var {
         return Qt.createQmlObject(
             "import org.kde.plasma.extras as PlasmaExtras; PlasmaExtras.MenuItem {}",
             parent
@@ -88,7 +92,7 @@ PlasmaExtras.Menu {
         for (let i = 0; i < childCount; ++i) {
             const childIndex = tasksModel.makeModelIndex(modelIndex, i);
             const windowItem = newMenuItem(windowChooserMenu);
-            windowItem.text = String(tasksModel.data(childIndex, Qt.DisplayRole) || tasksModel.data(childIndex, atm.AppName) || i18n("Window %1", i + 1));
+            windowItem.text = String(tasksModel.data(childIndex, Qt.DisplayRole) || tasksModel.data(childIndex, atm.AppName) || qsTr("Window %1").arg(i + 1));
             windowItem.icon = tasksModel.data(childIndex, Qt.DecorationRole);
             windowItem.clicked.connect(() => activateModelIndex(childIndex));
             windowChooserMenu.addMenuItem(windowItem);
@@ -99,16 +103,16 @@ PlasmaExtras.Menu {
         PlasmaExtras.MenuItem {
             id: chooseWindowItem
 
-            text: i18n("Activate Window")
+            text: qsTr("Activate Window")
             icon: "view-list-tree"
 
             readonly property PlasmaExtras.Menu _windowChooserMenu: PlasmaExtras.Menu {
                 id: windowChooserMenu
 
-                visualParent: chooseWindowItem.action
+                visualParent: chooseWindowItem
 
                 function refresh(): void {
-                    populateWindowChooser(windowChooserMenu);
+                    menu.populateWindowChooser(windowChooserMenu);
                 }
 
                 Component.onCompleted: refresh()
@@ -132,7 +136,7 @@ PlasmaExtras.Menu {
 
         if (isWindow || isGroup) {
             const activateItem = newMenuItem(menu);
-            activateItem.text = i18n("Activate");
+            activateItem.text = qsTr("Activate");
             activateItem.icon = "window-restore";
             activateItem.clicked.connect(() => activateModelIndex(modelIndex));
             addMenuItem(activateItem);
@@ -147,7 +151,7 @@ PlasmaExtras.Menu {
 
         if (canNewInstance) {
             const newInstanceItem = newMenuItem(menu);
-            newInstanceItem.text = i18n("Open New Window");
+            newInstanceItem.text = qsTr("Open New Window");
             newInstanceItem.icon = "window-new";
             newInstanceItem.clicked.connect(() => tasksModel.requestNewInstance(modelIndex));
             addMenuItem(newInstanceItem);
@@ -161,7 +165,7 @@ PlasmaExtras.Menu {
             const isPinned = tasksModel.launcherList.some(l => l === launcherUrl.toString())
                 || !!get(atm.IsLauncher);
             const pinItem = newMenuItem(menu);
-            pinItem.text = isPinned ? i18n("Unpin from List") : i18n("Pin to List");
+            pinItem.text = isPinned ? qsTr("Unpin from List") : qsTr("Pin to List");
             pinItem.icon = isPinned ? "window-unpin" : "window-pin";
             pinItem.clicked.connect(() => {
                 if (isPinned) {
@@ -182,7 +186,7 @@ PlasmaExtras.Menu {
 
                 if (placesActions.length > 0) {
                     addSeparator();
-                    addHeader(i18n("Places"));
+                    addHeader(qsTr("Places"));
                     for (let i = 0; i < placesActions.length; ++i) {
                         addQAction(placesActions[i]);
                     }
@@ -190,7 +194,7 @@ PlasmaExtras.Menu {
                     hasDynamicItems = true;
                 } else if (recentActions.length > 0) {
                     addSeparator();
-                    addHeader(i18n("Recent Files"));
+                    addHeader(qsTr("Recent Files"));
                     for (let i = 0; i < recentActions.length; ++i) {
                         addQAction(recentActions[i]);
                     }
@@ -200,7 +204,7 @@ PlasmaExtras.Menu {
 
                 if (jumpActions.length > 0) {
                     addSeparator();
-                    addHeader(i18n("Actions"));
+                    addHeader(qsTr("Actions"));
                     for (let i = 0; i < jumpActions.length; ++i) {
                         addQAction(jumpActions[i]);
                     }
@@ -217,7 +221,7 @@ PlasmaExtras.Menu {
                 addSeparator();
             }
             const closeItem = newMenuItem(menu);
-            closeItem.text = isGroup ? i18n("Close All Windows") : i18n("Close");
+            closeItem.text = isGroup ? qsTr("Close All Windows") : qsTr("Close");
             closeItem.icon = "window-close";
             closeItem.clicked.connect(() => tasksModel.requestClose(modelIndex));
             addMenuItem(closeItem);

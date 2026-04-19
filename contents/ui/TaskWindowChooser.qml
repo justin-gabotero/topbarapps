@@ -29,7 +29,7 @@ PlasmaExtras.Menu {
         return PlasmaExtras.Menu.TopPosedLeftAlignedPopup;
     }
 
-    minimumWidth: visualParent ? visualParent.width : 0
+    minimumWidth: menuWidthFor(visualParent)
 
     onStatusChanged: {
         if (status === PlasmaExtras.Menu.Closed) {
@@ -37,7 +37,11 @@ PlasmaExtras.Menu {
         }
     }
 
-    function newMenuItem(parent: QtObject): PlasmaExtras.MenuItem {
+    function menuWidthFor(obj: var): real {
+        return (obj && obj["width"] !== undefined) ? Number(obj["width"]) : 0;
+    }
+
+    function newMenuItem(parent: QtObject): var {
         return Qt.createQmlObject(
             "import org.kde.plasma.extras as PlasmaExtras; PlasmaExtras.MenuItem {}",
             parent
@@ -62,7 +66,7 @@ PlasmaExtras.Menu {
         for (let i = 0; i < childCount; ++i) {
             const childIndex = tasksModel.makeModelIndex(parentRow, i);
             const menuItem = newMenuItem(menu);
-            menuItem.text = String(tasksModel.data(childIndex, Qt.DisplayRole) || tasksModel.data(childIndex, atm.AppName) || tasksModel.data(childIndex, atm.GenericName) || i18n("Window %1", i + 1));
+            menuItem.text = String(tasksModel.data(childIndex, Qt.DisplayRole) || tasksModel.data(childIndex, atm.AppName) || tasksModel.data(childIndex, atm.GenericName) || qsTr("Window %1").arg(i + 1));
             menuItem.icon = tasksModel.data(childIndex, Qt.DecorationRole);
             menuItem.clicked.connect(() => activateModelIndex(childIndex));
             addMenuItem(menuItem);

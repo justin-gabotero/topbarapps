@@ -12,16 +12,19 @@ Item {
     required property string title
     required property var iconSource
     required property bool active
+    property bool running: true
     property string secondaryText: ""
     property bool pinned: false
     property bool dragging: false
+
+    readonly property bool pinnedNotRunning: row.pinned && !row.running
 
     signal clicked(var sourceItem)
     signal rightClicked(var sourceItem)
 
     implicitHeight: Kirigami.Units.gridUnit * 2
 
-    opacity: row.dragging ? 0.5 : 1.0
+    opacity: row.dragging ? 0.5 : (row.pinnedNotRunning ? 0.58 : 1.0)
 
     Rectangle {
         anchors.fill: parent

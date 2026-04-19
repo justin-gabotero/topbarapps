@@ -16,6 +16,12 @@ PlasmoidItem {
     readonly property int maxVisibleRows: Math.max(3, Plasmoid.configuration.maxVisibleRows)
     readonly property string triggerIconName: Plasmoid.configuration.triggerIcon || "view-list-tree"
 
+    function showDynamicMenu(menuObj: var): void {
+        if (menuObj) {
+            menuObj.show();
+        }
+    }
+
     function modelIndexFor(row: int): var {
         return tasksModel.makeModelIndex(row);
     }
@@ -34,6 +40,10 @@ PlasmoidItem {
 
     function isWindowTask(row: int): bool {
         return !!taskData(row, TaskManager.AbstractTasksModel.IsWindow);
+    }
+
+    function isTaskRunning(row: int): bool {
+        return isWindowTask(row) || isGroupTask(row);
     }
 
     function isPinnedRow(row: int): bool {
@@ -89,7 +99,7 @@ PlasmoidItem {
             return "";
         }
         const count = childCountFor(row);
-        return count > 1 ? i18n("%1 windows", count) : i18n("%1 window", count);
+        return count > 1 ? qsTr("%1 windows").arg(count) : qsTr("%1 window").arg(count);
     }
 
     function visibleTaskCount(): int {
@@ -189,7 +199,7 @@ PlasmoidItem {
             return;
         }
 
-        const menu = component.createObject(root, {
+        var menu = component.createObject(root, {
             tasksModel: tasksModel,
             parentRow: row,
             visualParent: sourceItem
@@ -199,7 +209,7 @@ PlasmoidItem {
             activateTask(row);
             return;
         }
-        menu.show();
+        root.showDynamicMenu(menu);
     }
 
     function activateTask(row: int): void {
@@ -257,7 +267,7 @@ PlasmoidItem {
             return;
         }
 
-        const menu = component.createObject(root, {
+        var menu = component.createObject(root, {
             backend: backend,
             tasksModel: tasksModel,
             modelIndex: modelIndexFor(row),
@@ -267,7 +277,7 @@ PlasmoidItem {
             console.warn("Failed to create task context menu");
             return;
         }
-        menu.show();
+        root.showDynamicMenu(menu);
     }
 
     preferredRepresentation: fullRepresentation
@@ -280,7 +290,7 @@ PlasmoidItem {
     Layout.maximumWidth: Kirigami.Units.gridUnit * 3
 
     readonly property TaskManager.TasksModel tasksModel: TaskManager.TasksModel {
-        id: tasksModel
+        id: tasksModelObj
 
         filterByVirtualDesktop: false
         filterByScreen: false
@@ -302,7 +312,7 @@ PlasmoidItem {
     }
 
     Connections {
-        target: tasksModel
+        target: root.tasksModel
 
         function onCountChanged(): void {
             root.refreshUiFromModel();
@@ -321,7 +331,7 @@ PlasmoidItem {
             // Close only when a window actually gains focus (not when all windows
             // lose focus, e.g. when the dropdown itself opens).
             if (dropdown.visible) {
-                for (let i = 0; i < tasksModel.count; ++i) {
+                for (let i = 0; i < root.tasksModel.count; ++i) {
                     if (root.taskData(i, TaskManager.AbstractTasksModel.IsActive)) {
                         dropdown.visible = false;
                         break;
@@ -376,10 +386,6 @@ PlasmoidItem {
             default:
                 return Qt.TopEdge
         }
-
-        removeBorderStrategy: Plasmoid.location === PlasmaCore.Types.Floating
-            ? PlasmaCore.AppletPopup.AtScreenEdges
-            : PlasmaCore.AppletPopup.AtScreenEdges | PlasmaCore.AppletPopup.AtPanelEdges
 
         onActiveChanged: {
             if (!active) {
@@ -438,6 +444,7 @@ PlasmoidItem {
                         secondaryText: root.rowSecondaryText(delegateItem.taskModelRow)
                         iconSource: root.taskData(delegateItem.taskModelRow, Qt.DecorationRole)
                         active: !!root.taskData(delegateItem.taskModelRow, TaskManager.AbstractTasksModel.IsActive)
+                        running: root.isTaskRunning(delegateItem.taskModelRow)
                         pinned: root.isRowPinned(delegateItem.taskModelRow)
                         dragging: dragHandle.drag.active
 
