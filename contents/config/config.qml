@@ -1,5 +1,10 @@
 import QtQuick
+import org.kde.plasma.configuration
 
-import "../ui" as Ui
-
-Ui.ConfigAppearance {}
+ConfigModel {
+    ConfigCategory {
+        name: i18n("General")
+        icon: "preferences-system-windows"
+        source: "ConfigGeneral.qml"
+    }
+}

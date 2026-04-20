@@ -6,17 +6,17 @@ import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.extras as PlasmaExtras
 import org.kde.taskmanager as TaskManager
-import org.kde.plasma.private.taskmanager as TaskManagerApplet
 
 PlasmaExtras.Menu {
     id: menu
 
-    required property TaskManagerApplet.Backend backend
+    property var backend: null
     required property var tasksModel
     required property var modelIndex
 
     readonly property var atm: TaskManager.AbstractTasksModel
     property bool populated: false
+    property bool autoOpen: false
 
     placement: {
         if (Plasmoid.location === PlasmaCore.Types.LeftEdge) {
@@ -36,6 +36,12 @@ PlasmaExtras.Menu {
     onStatusChanged: {
         if (status === PlasmaExtras.Menu.Closed) {
             destroy();
+        }
+    }
+
+    Component.onCompleted: {
+        if (autoOpen) {
+            show();
         }
     }
 
@@ -178,7 +184,7 @@ PlasmaExtras.Menu {
             hasAnyItems = true;
         }
 
-        if (hasLauncher) {
+        if (hasLauncher && backend) {
             try {
                 const placesActions = backend.placesActions(launcherUrl, false, menu);
                 const recentActions = backend.recentDocumentActions(launcherUrl, menu);

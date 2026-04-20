@@ -2,23 +2,25 @@
 <kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
       xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
-      http://www.kde.org/standards/kcfg/1.0/kcfg.xsd" >
+      http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
   <kcfgfile name=""/>
 
   <group name="General">
-    <entry name="maxVisibleRows" type="Int">
-      <label>Maximum visible rows in the dropdown before scrolling.</label>
-      <default>8</default>
-      <min>3</min>
-      <max>20</max>
+    <entry name="hoverCloseDelayMs" type="Int">
+      <label>Delay in milliseconds before the orbit arc closes after the cursor leaves.</label>
+      <default>420</default>
+      <min>100</min>
+      <max>2000</max>
     </entry>
-    <entry name="triggerIcon" type="String">
-      <label>Icon name for the panel trigger button.</label>
-      <default>view-list-tree</default>
+    <entry name="nodeStepPx" type="Int">
+      <label>Horizontal spacing in pixels between orbit nodes.</label>
+      <default>160</default>
+      <min>60</min>
+      <max>200</max>
     </entry>
-    <entry name="pinnedOrder" type="String">
-      <label>JSON array of launcher URLs representing the pinned app order.</label>
-      <default>[]</default>
+    <entry name="filterCurrentDesktopOnly" type="Bool">
+      <label>Show only windows on the current virtual desktop.</label>
+      <default>true</default>
     </entry>
   </group>
 </kcfg>

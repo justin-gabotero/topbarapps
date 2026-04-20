@@ -1,1 +1,5 @@
-# Dropdown Task Switcher (Plasma Widget)
+# WIP
+
+```sh
+  ./reinstall.sh 
+```
