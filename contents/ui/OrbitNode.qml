@@ -11,8 +11,26 @@ Rectangle {
     property string taskApp
     property var taskIcon
     property bool minimized: false
+    property int windowCount: 1
+    readonly property string appDisplayText: {
+        const extraCount = Math.max(0, windowCount - 1);
+        if (extraCount === 0)
+            return node.taskApp;
+        return node.taskApp + "  [+" + extraCount + " windows]";
+    }
+
+    readonly property color accentColor: iconColors.dominant.hslSaturation > 0.1
+        ? iconColors.dominant
+        : Kirigami.Theme.highlightColor
+
+    Kirigami.ImageColors {
+        id: iconColors
+        source: node.taskIcon || "application-x-executable"
+    }
     property int nodeWidth: 160
+    property real openScale: 1.0
     readonly property bool hovered: nodeHoverHandler.hovered
+    property real hoverScale: hovered ? 1.02 : 1.0
 
     signal activate()
     signal close()
@@ -21,25 +39,13 @@ Rectangle {
     width: nodeWidth
     implicitHeight: Kirigami.Units.gridUnit * 1.3
     implicitWidth: nodeWidth
-    radius: height / 2
+    radius: 5
 
-    color: hovered
-        ? Qt.rgba(
-            Kirigami.Theme.highlightColor.r,
-            Kirigami.Theme.highlightColor.g,
-            Kirigami.Theme.highlightColor.b,
-            0.14
-          )
-        : Kirigami.Theme.backgroundColor
-    border.color: Qt.rgba(
-        Kirigami.Theme.highlightColor.r,
-        Kirigami.Theme.highlightColor.g,
-        Kirigami.Theme.highlightColor.b,
-        hovered ? 0.42 : 0.25
-    )
+    color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, hovered ? 0.40 : 0.30)
+    border.color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, hovered ? 0.55 : 0.45)
     border.width: 1
     opacity: node.minimized ? 0.6 : 1.0
-    scale: hovered ? 1.02 : 1.0
+    scale: openScale * hoverScale
 
     Behavior on color {
         ColorAnimation { duration: 140 }
@@ -53,7 +59,7 @@ Rectangle {
     }
 
     Accessible.role: Accessible.Button
-    Accessible.name: node.taskApp + (node.taskTitle ? " · " + node.taskTitle : "")
+    Accessible.name: node.appDisplayText + (node.taskTitle ? " · " + node.taskTitle : "")
 
     RowLayout {
         id: row
@@ -69,7 +75,7 @@ Rectangle {
         }
 
         QQC2.Label {
-            text: node.taskApp
+            text: node.appDisplayText
             font.weight: Font.Medium
             elide: Text.ElideRight
             Layout.fillWidth: true

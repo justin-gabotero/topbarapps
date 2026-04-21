@@ -13,6 +13,8 @@ PlasmaExtras.Menu {
     property var backend: null
     required property var tasksModel
     required property var modelIndex
+    property bool destroyOnClose: true
+    readonly property bool menuOpen: status !== PlasmaExtras.Menu.Closed
 
     readonly property var atm: TaskManager.AbstractTasksModel
     property bool populated: false
@@ -35,7 +37,8 @@ PlasmaExtras.Menu {
 
     onStatusChanged: {
         if (status === PlasmaExtras.Menu.Closed) {
-            destroy();
+            if (destroyOnClose)
+                destroy();
         }
     }
 
@@ -244,6 +247,8 @@ PlasmaExtras.Menu {
     }
 
     function show(): void {
+        clearMenuItems();
+        populated = false;
         populate();
         openRelative();
     }

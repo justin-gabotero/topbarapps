@@ -7,31 +7,49 @@ import org.kde.taskmanager as TaskManager
 Item {
     id: arc
 
+    // --- Properties ---
     property TaskManager.TasksModel tasksModel
     property int activeIndex: -1
     property int otherCount: 0
     property int step: 160
     property bool open: false
-    property real sidePadding: 2
+    property real sidePadding: Kirigami.Units.smallSpacing 
+    property real contentWidth: (arc.step * Math.max(arc.visibleCount, 1)) + (arc.sidePadding * 2)
+    property bool ignoreUpdates: false
 
-    // Vertical drop per slot away from center (creates the arc curve)
-    readonly property real arcStepY: 10
-    readonly property real nodeHeight: Kirigami.Units.gridUnit * 1.3
+    // Updated nodeHeight to be more substantial
+    readonly property real nodeHeight: Kirigami.Units.gridUnit * 1.6 
     readonly property real topMargin: Kirigami.Units.smallSpacing
-    readonly property var otherRows: {
-        const rows = [];
-        if (!arc.tasksModel)
-            return rows;
+    
+    readonly property var groupedNodes: {
+        const groups = [];
+        const byApp = {};
+        if (!arc.tasksModel) return groups;
 
-        for (let i = 0; i < arc.tasksModel.count; ++i) {
+        for (let i = 0; i < arc.tasksModel.rowCount(); ++i) {
             const idx = arc.tasksModel.index(i, 0);
-            if (!arc.tasksModel.data(idx, TaskManager.AbstractTasksModel.IsActive))
-                rows.push(i);
+            const appName = String(arc.tasksModel.data(idx, TaskManager.AbstractTasksModel.AppName) || qsTr("Unknown App"));
+            const key = appName.toLowerCase();
+
+            if (!byApp[key]) {
+                const group = {
+                    appName: appName,
+                    rows: [i],
+                    icon: arc.tasksModel.data(idx, Qt.DecorationRole),
+                    hasMinimized: arc.tasksModel.data(idx, TaskManager.AbstractTasksModel.IsMinimized) === true
+                };
+                byApp[key] = group;
+                groups.push(group);
+            } else {
+                byApp[key].rows.push(i);
+                if (arc.tasksModel.data(idx, TaskManager.AbstractTasksModel.IsMinimized) === true)
+                    byApp[key].hasMinimized = true;
+            }
         }
-        return rows;
+
+        return groups;
     }
-    readonly property int visibleCount: otherRows.length
-    readonly property real arcTotalDrop: arc.arcStepY * Math.floor(arc.visibleCount / 2)
+    readonly property int visibleCount: groupedNodes.length
 
     signal hoverEnter()
     signal hoverLeave()
@@ -39,71 +57,100 @@ Item {
     signal close(int row)
     signal contextMenu(int row, var sourceItem)
 
-    implicitWidth: (arc.step * Math.max(arc.visibleCount, 1)) + arc.sidePadding * 2
-    implicitHeight: arc.nodeHeight + arc.arcTotalDrop + arc.topMargin + Kirigami.Units.smallSpacing
+    // implicitHeight is now strictly tied to the node + padding
+    implicitWidth: contentWidth
+    implicitHeight: arc.nodeHeight + (arc.topMargin * 2)
 
-    // Topmost hover sentinel — acceptedButtons:Qt.NoButton lets clicks fall through
-    MouseArea {
+    // Background - Now covers the full height of the Item
+    Rectangle {
+        id: background
         anchors.fill: parent
-        hoverEnabled: true
-        acceptedButtons: Qt.NoButton
-        z: 1
-        onEntered: arc.hoverEnter()
-        onExited: arc.hoverLeave()
+        color: "#050c13"
+        radius: Kirigami.Units.smallSpacing
+        border.color: Qt.rgba(1, 1, 1, 0.1)
+        border.width: 1
+        z: 0 
+        
+        opacity: arc.open ? 1.0 : 0.0
+        scale: arc.open ? 1.0 : 0.98
+        
+        Behavior on opacity { NumberAnimation { duration: 150 } }
+        Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
     }
 
-    Repeater {
-        model: arc.visibleCount
+    HoverHandler {
+        onHoveredChanged: {
+            if (hovered) {
+                arc.ignoreUpdates = true;
+                arc.hoverEnter();
+            } else {
+                arc.ignoreUpdates = false;
+                arc.hoverLeave();
+            }
+        }
+    }
 
-        delegate: OrbitNode {
-            id: node
-            required property int index
-            readonly property int taskModelRow: arc.otherRows[index]
-            readonly property var taskIndex: arc.tasksModel.index(taskModelRow, 0)
-            readonly property bool isMinimizedTask: arc.tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.IsMinimized) === true
+    Flickable {
+        id: flick
+        anchors.fill: parent
+        contentWidth: arc.contentWidth
+        contentHeight: arc.height
+        flickableDirection: Flickable.HorizontalFlick
+        clip: true // Clipping is fine now because the height is matched
+        interactive: contentWidth > width
+        focus: false 
+        z: 1
 
-            readonly property int slotIndex: arc.visibleCount - 1 - index
+        Behavior on contentX {
+            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+        }
 
-            // Distance from the center slot — drives the arc Y curve
-            readonly property real centerSlot: (arc.visibleCount - 1) / 2
-            readonly property real distFromCenter: Math.abs(slotIndex - centerSlot)
+        Repeater {
+            model: arc.visibleCount
 
-            // Arc Y: center nodes sit highest (closest to pill), edges drop down
-            readonly property real arcY: arc.topMargin + distFromCenter * arc.arcStepY
+            delegate: OrbitNode {
+                id: node
+                required property int index
+                focus: false
+                
+                readonly property var nodeGroup: (index >= 0 && index < arc.groupedNodes.length) ? arc.groupedNodes[index] : null
+                readonly property var groupRows: nodeGroup ? nodeGroup.rows : []
+                readonly property int taskModelRow: groupRows.length > 0 ? groupRows[0] : -1
+                readonly property var taskIndex: taskModelRow >= 0 ? arc.tasksModel.index(taskModelRow, 0) : null
+                readonly property bool isMinimizedTask: nodeGroup ? nodeGroup.hasMinimized : false
+                readonly property int slotIndex: arc.visibleCount - 1 - index
 
-            nodeWidth: arc.step
+                nodeWidth: arc.step
+                taskRow: taskModelRow
+                taskTitle: taskModelRow >= 0 ? String(arc.tasksModel.data(taskIndex, Qt.DisplayRole) || "") : ""
+                taskApp: nodeGroup ? nodeGroup.appName : ""
+                taskIcon: nodeGroup ? nodeGroup.icon : null
+                windowCount: groupRows.length
+                minimized: isMinimizedTask
 
-            taskRow: taskModelRow
-            taskTitle: String(arc.tasksModel.data(taskIndex, Qt.DisplayRole) || "")
-            taskApp: String(arc.tasksModel.data(taskIndex, TaskManager.AbstractTasksModel.AppName) || "")
-            taskIcon: arc.tasksModel.data(taskIndex, Qt.DecorationRole)
-            minimized: isMinimizedTask
+                x: arc.sidePadding + (slotIndex * arc.step)
+                
+                // Active Y is centered in the background height
+                y: arc.open ? arc.topMargin : -height
+                
+                opacity: arc.open ? 1.0 : 0.0
+                openScale: arc.open ? 1.0 : 0.85
 
-            x: arc.sidePadding + slotIndex * arc.step
-            y: arc.open ? arcY : -(arc.nodeHeight + arc.topMargin)
-            opacity: arc.open ? 1.0 : 0.0
-            scale: arc.open ? 1.0 : 0.85
-
-            Behavior on y {
-                NumberAnimation {
-                    duration: 220
-                    easing.type: Easing.OutBack
-                    easing.overshoot: 0.6
+                Behavior on y {
+                    NumberAnimation {
+                        duration: 250
+                        easing.type: Easing.OutBack
+                        easing.overshoot: 0.2 // Minimal overshoot to prevent clipping
+                    }
                 }
-            }
-            Behavior on opacity {
-                SequentialAnimation {
-                    PauseAnimation { duration: arc.open ? node.slotIndex * 20 : 0 }
-                    NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                
+                onActivate: arc.activate(node.taskRow)
+                onClose: {
+                    for (let i = groupRows.length - 1; i >= 0; --i)
+                        arc.close(groupRows[i]);
                 }
+                onOpenContextMenu: (sourceItem) => arc.contextMenu(node.taskRow, sourceItem)
             }
-            Behavior on scale {
-                NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
-            }
-
-            onActivate: arc.activate(node.taskRow)
-            onClose: arc.close(node.taskRow)
-            onOpenContextMenu: (sourceItem) => arc.contextMenu(node.taskRow, sourceItem)
         }
     }
 }

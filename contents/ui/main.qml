@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 
@@ -20,6 +22,7 @@ PlasmoidItem {
 
     readonly property TaskManager.TasksModel tasksModel: TaskManager.TasksModel {
         id: tasksModelObj
+        screenGeometry: Plasmoid.containment.screenGeometry
         filterByVirtualDesktop: Plasmoid.configuration.filterCurrentDesktopOnly
         filterByScreen: true
         filterByActivity: true
@@ -40,7 +43,34 @@ PlasmoidItem {
         return -1;
     }
 
+    readonly property int orbitCount: tasksModel.count
+    readonly property int orbitGroupCount: {
+        const grouped = {};
+        let count = 0;
+        for (let i = 0; i < tasksModel.count; ++i) {
+            const idx = tasksModel.index(i, 0);
+            const appName = String(tasksModel.data(idx, TaskManager.AbstractTasksModel.AppName) || qsTr("Unknown App"));
+            const key = appName.toLowerCase();
+            if (!grouped[key]) {
+                grouped[key] = true;
+                count += 1;
+            }
+        }
+        return count;
+    }
     readonly property int otherCount: Math.max(0, tasksModel.count - (activeIndex >= 0 ? 1 : 0))
+    readonly property real containmentScreenWidth: (Plasmoid.containment && Plasmoid.containment.screenGeometry.width > 0)
+        ? Plasmoid.containment.screenGeometry.width
+        : 1920
+    readonly property real popupOuterMargin: Kirigami.Units.gridUnit
+    readonly property real maxPopupWidth: Math.max(Kirigami.Units.gridUnit * 8, containmentScreenWidth - popupOuterMargin * 2)
+    readonly property real estimatedPopupSidePadding: Kirigami.Units.largeSpacing * 2
+    readonly property int arcStepPx: Plasmoid.configuration.nodeStepPx
+    readonly property real arcImplicitWidth: Math.min(
+        (arcStepPx * Math.max(orbitGroupCount, 1)) + 4,
+        maxPopupWidth
+    )
+    readonly property real arcImplicitHeight: (Kirigami.Units.gridUnit * 1.3) + (Kirigami.Units.smallSpacing * 2)
 
     // ── Hover open/close ──────────────────────────────────────────────────────
 
@@ -49,6 +79,7 @@ PlasmoidItem {
     property bool pillHovered: false
     property bool arcHovered: false
     property bool arcLockedOpen: false
+    readonly property bool contextMenuOpen: nodeContextMenu.menuOpen
 
     // 300 ms hold on pill before arc opens
     Timer {
@@ -75,10 +106,20 @@ PlasmoidItem {
         id: closeTimer
         interval: Plasmoid.configuration.hoverCloseDelayMs
         onTriggered: {
-            if (!root.pillHovered && !root.arcHovered) {
+            if (!root.pillHovered && !root.arcHovered && !root.contextMenuOpen) {
                 root.arcOpen = false;
             }
         }
+    }
+
+    onContextMenuOpenChanged: {
+        if (contextMenuOpen) {
+            closeTimer.stop();
+            return;
+        }
+
+        if (arcOpen && !pillHovered && !arcHovered)
+            closeTimer.restart();
     }
 
     onArcOpenChanged: {
@@ -106,7 +147,7 @@ PlasmoidItem {
         if (!root.arcOpen || root.arcHovered)
             return;
 
-        if (!engageTimer.running && !root.arcLockedOpen)
+        if (!engageTimer.running && !root.arcLockedOpen && !root.contextMenuOpen)
             closeTimer.restart();
     }
     function onArcEnter() {
@@ -120,7 +161,7 @@ PlasmoidItem {
     function onArcLeave() {
         root.arcHovered = false;
 
-        if (!root.pillHovered)
+        if (!root.pillHovered && !root.contextMenuOpen)
             closeTimer.restart();
     }
 
@@ -142,17 +183,18 @@ PlasmoidItem {
         if (!idx.valid)
             return;
 
-        const menu = taskContextMenuComponent.createObject(root, {
-            autoOpen: true,
-            visualParent: sourceItem,
-            tasksModel: root.tasksModel,
-            modelIndex: idx
-        });
+        nodeContextMenu.visualParent = sourceItem;
+        nodeContextMenu.modelIndex = idx;
+        nodeContextMenu.autoOpen = false;
+        nodeContextMenu.show();
     }
 
-    Component {
-        id: taskContextMenuComponent
-        TaskContextMenu {}
+    TaskContextMenu {
+        id: nodeContextMenu
+        tasksModel: root.tasksModel
+        modelIndex: root.tasksModel.index(0, 0)
+        autoOpen: false
+        destroyOnClose: false
     }
 
     // ── Widget body ───────────────────────────────────────────────────────────
@@ -176,39 +218,44 @@ PlasmoidItem {
 
     // ── Arc popup ─────────────────────────────────────────────────────────────
 
-    PlasmaCore.PopupPlasmaWindow {
+    PlasmaCore.Dialog {
         id: arcPopup
         visualParent: pill
-        visible: root.arcOpen && root.otherCount > 0
-        modality: Qt.NonModal
-        flags: Qt.ToolTip | Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
+        visible: root.arcOpen && root.orbitCount > 0
+        flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
+        backgroundHints: PlasmaCore.Types.NoBackground
 
-        popupDirection: switch (Plasmoid.location) {
-            case PlasmaCore.Types.TopEdge:   return Qt.BottomEdge
-            case PlasmaCore.Types.LeftEdge:  return Qt.RightEdge
-            case PlasmaCore.Types.RightEdge: return Qt.LeftEdge
-            default:                         return Qt.TopEdge
+        location: switch (Plasmoid.location) {
+            case PlasmaCore.Types.TopEdge:   return PlasmaCore.Types.TopEdge
+            case PlasmaCore.Types.LeftEdge:  return PlasmaCore.Types.LeftEdge
+            case PlasmaCore.Types.RightEdge: return PlasmaCore.Types.RightEdge
+            default:                         return PlasmaCore.Types.BottomEdge
         }
 
-        width: orbitArc.implicitWidth + leftPadding + rightPadding
-        height: orbitArc.implicitHeight + topPadding + bottomPadding
+        mainItem: Loader {
+            id: arcLoader
+            width: Math.min(root.arcImplicitWidth, root.maxPopupWidth)
+            height: root.arcImplicitHeight
+            active: arcPopup.visible
+            asynchronous: false
 
-        mainItem: OrbitArc {
-            id: orbitArc
-            width: implicitWidth
-            height: implicitHeight
+            sourceComponent: OrbitArc {
+                width: parent.width
+                height: parent.height
 
-            tasksModel: root.tasksModel
-            activeIndex: root.activeIndex
-            otherCount: root.otherCount
-            step: Plasmoid.configuration.nodeStepPx
-            open: root.arcOpen && arcPopup.visible
+                tasksModel: root.tasksModel
+                activeIndex: root.activeIndex
+                otherCount: root.otherCount
+                step: root.arcStepPx
+                //contentWidth: (root.arcStepPx * Math.max(root.otherCount, 1)) + 4
+                open: arcLoader.active && arcPopup.visible
 
-            onHoverEnter: root.onArcEnter()
-            onHoverLeave: root.onArcLeave()
-            onActivate: (row) => { root.activateRow(row); root.arcOpen = false; }
-            onClose: (row) => root.closeRow(row)
-            onContextMenu: (row, sourceItem) => root.showNodeContextMenu(row, sourceItem)
+                onHoverEnter: root.onArcEnter()
+                onHoverLeave: root.onArcLeave()
+                onActivate: (row) => { root.activateRow(row); root.arcOpen = false; }
+                onClose: (row) => root.closeRow(row)
+                onContextMenu: (row, sourceItem) => root.showNodeContextMenu(row, sourceItem)
+            }
         }
     }
 }

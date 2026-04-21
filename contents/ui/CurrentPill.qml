@@ -7,17 +7,25 @@ import org.kde.taskmanager as TaskManager
 Rectangle {
     id: pill
 
+    // --- Properties ---
     property TaskManager.TasksModel tasksModel
     property int activeIndex: -1
     property int otherCount: 0
+    
+    // Internal flag to prevent focus-grabbing updates during hover
+    property bool ignoreUpdates: false
 
     signal hoverEnter()
     signal hoverLeave()
     signal closeActive()
 
-    readonly property string appName: activeIndex >= 0
-        ? String(tasksModel.data(tasksModel.index(activeIndex, 0), TaskManager.AbstractTasksModel.AppName) || "")
-        : "Task Orbit"
+    // --- Logic: Dynamic Data Extraction ---
+    readonly property string appName: {
+        const name = activeIndex >= 0 
+            ? String(tasksModel.data(tasksModel.index(activeIndex, 0), TaskManager.AbstractTasksModel.AppName) || "")
+            : "";
+        return name.length > 0 ? name : "Task Orbit";
+    }
 
     readonly property string windowTitle: activeIndex >= 0
         ? String(tasksModel.data(tasksModel.index(activeIndex, 0), Qt.DisplayRole) || "")
@@ -25,28 +33,69 @@ Rectangle {
 
     readonly property var taskIcon: activeIndex >= 0
         ? tasksModel.data(tasksModel.index(activeIndex, 0), Qt.DecorationRole)
-        : null
+        : "plasma" 
 
-    // Strip trailing " — App Name" style suffixes from window titles
-    readonly property string shortTitle: windowTitle.replace(/\s[—–-]\s.*$/, "")
+    readonly property string shortTitle: windowTitle.replace(/\s[—–-]\s.*$/, "").trim()
 
-    color: Qt.rgba(
-        Kirigami.Theme.highlightColor.r,
-        Kirigami.Theme.highlightColor.g,
-        Kirigami.Theme.highlightColor.b,
-        0.16
-    )
-    border.color: Qt.rgba(
-        Kirigami.Theme.highlightColor.r,
-        Kirigami.Theme.highlightColor.g,
-        Kirigami.Theme.highlightColor.b,
-        0.30
-    )
+    readonly property color accentColor: iconColors.dominant.hslSaturation > 0.1
+        ? iconColors.dominant
+        : Kirigami.Theme.highlightColor
+
+    // --- Logic: State Synchronization ---
+    function updateState() {
+        // Block updates if we are currently hovering (preventing focus-grab loops)
+        if (!tasksModel || ignoreUpdates) return;
+        
+        let foundActive = -1;
+        let count = 0;
+        
+        for (let i = 0; i < tasksModel.rowCount(); ++i) {
+            const idx = tasksModel.index(i, 0);
+            const isActive = tasksModel.data(idx, TaskManager.AbstractTasksModel.IsActive);
+            if (isActive) {
+                foundActive = i;
+            } else {
+                count++;
+            }
+        }
+        
+        pill.activeIndex = foundActive;
+        pill.otherCount = count;
+    }
+
+    Connections {
+        target: pill.tasksModel
+        function onDataChanged() { pill.updateState(); }
+        function onRowsInserted() { pill.updateState(); }
+        function onRowsRemoved() { pill.updateState(); }
+        function onModelReset() { pill.updateState(); }
+    }
+
+    Component.onCompleted: updateState()
+
+    // --- UI Styling ---
+    Kirigami.ImageColors {
+        id: iconColors
+        source: pill.taskIcon || "application-x-executable"
+    }
+
+    color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.18)
+    border.color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.45)
     border.width: 1
     radius: height / 2
 
     implicitHeight: Kirigami.Units.gridUnit * 1.4
     implicitWidth: row.implicitWidth + Kirigami.Units.largeSpacing * 2
+    
+    Behavior on implicitWidth {
+        NumberAnimation {
+            duration: Kirigami.Units.longDuration
+            easing.type: Easing.OutCubic
+        }
+    }
+
+    clip: true 
+    opacity: 1.0
 
     Accessible.role: Accessible.Button
     Accessible.name: appName + (shortTitle ? " · " + shortTitle : "")
@@ -59,12 +108,13 @@ Rectangle {
         spacing: Kirigami.Units.smallSpacing
 
         Kirigami.Icon {
-            source: pill.taskIcon || "application-x-executable"
+            source: pill.taskIcon
             Layout.preferredWidth: Kirigami.Units.iconSizes.small
             Layout.preferredHeight: Kirigami.Units.iconSizes.small
         }
 
         QQC2.Label {
+            id: appLabel
             text: pill.appName
             font.weight: Font.Medium
             elide: Text.ElideRight
@@ -78,6 +128,7 @@ Rectangle {
         }
 
         QQC2.Label {
+            id: titleLabel
             text: pill.shortTitle
             opacity: 0.7
             elide: Text.ElideRight
@@ -85,7 +136,6 @@ Rectangle {
             visible: pill.shortTitle.length > 0
         }
 
-        // "+N" badge when other windows exist
         Rectangle {
             visible: pill.otherCount > 0
             radius: Kirigami.Units.smallSpacing
@@ -107,10 +157,19 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-
-        onEntered: pill.hoverEnter()
-        onExited: pill.hoverLeave()
-
+        
+        onEntered: {
+            pill.ignoreUpdates = true;
+            pill.hoverEnter();
+        }
+        
+        onExited: {
+            pill.ignoreUpdates = false;
+            // Catch up on any changes that happened while we were ignoring them
+            pill.updateState();
+            pill.hoverLeave();
+        }
+        
         onClicked: (mouse) => {
             if (mouse.button === Qt.MiddleButton)
                 pill.closeActive();
