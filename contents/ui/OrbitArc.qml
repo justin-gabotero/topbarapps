@@ -7,17 +7,17 @@ import org.kde.taskmanager as TaskManager
 Item {
     id: arc
 
-    // --- Properties ---
     property TaskManager.TasksModel tasksModel
     property int activeIndex: -1
     property int otherCount: 0
     property int step: 160
+    property real nodeGap: Kirigami.Units.smallSpacing
     property bool open: false
     property real sidePadding: Kirigami.Units.smallSpacing 
-    property real contentWidth: (arc.step * Math.max(arc.visibleCount, 1)) + (arc.sidePadding * 2)
+    property real laneStep: arc.step + arc.nodeGap
+    property real contentWidth: (arc.step * Math.max(arc.visibleCount, 1)) + (Math.max(arc.visibleCount - 1, 0) * arc.nodeGap) + (arc.sidePadding * 2)
     property bool ignoreUpdates: false
 
-    // Updated nodeHeight to be more substantial
     readonly property real nodeHeight: Kirigami.Units.gridUnit * 1.6 
     readonly property real topMargin: Kirigami.Units.smallSpacing
     
@@ -57,11 +57,9 @@ Item {
     signal close(int row)
     signal contextMenu(int row, var sourceItem)
 
-    // implicitHeight is now strictly tied to the node + padding
     implicitWidth: contentWidth
-    implicitHeight: arc.nodeHeight + (arc.topMargin * 2)
+    implicitHeight: arc.nodeHeight
 
-    // Background - Now covers the full height of the Item
     Rectangle {
         id: background
         anchors.fill: parent
@@ -96,7 +94,7 @@ Item {
         contentWidth: arc.contentWidth
         contentHeight: arc.height
         flickableDirection: Flickable.HorizontalFlick
-        clip: true // Clipping is fine now because the height is matched
+        clip: true
         interactive: contentWidth > width
         focus: false 
         z: 1
@@ -128,10 +126,10 @@ Item {
                 windowCount: groupRows.length
                 minimized: isMinimizedTask
 
-                x: arc.sidePadding + (slotIndex * arc.step)
+                x: arc.sidePadding + (slotIndex * arc.laneStep)
                 
-                // Active Y is centered in the background height
-                y: arc.open ? arc.topMargin : -height
+                // Vertically center each node within the arc container.
+                y: arc.open ? Math.max(0, (arc.height - height) / 2) : -height
                 
                 opacity: arc.open ? 1.0 : 0.0
                 openScale: arc.open ? 1.0 : 0.85

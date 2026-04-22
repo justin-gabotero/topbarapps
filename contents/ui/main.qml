@@ -67,10 +67,10 @@ PlasmoidItem {
     readonly property real estimatedPopupSidePadding: Kirigami.Units.largeSpacing * 2
     readonly property int arcStepPx: Plasmoid.configuration.nodeStepPx
     readonly property real arcImplicitWidth: Math.min(
-        (arcStepPx * Math.max(orbitGroupCount, 1)) + 4,
+        (arcStepPx * Math.max(orbitGroupCount, 1)) + (Kirigami.Units.smallSpacing * 2) + estimatedPopupSidePadding,
         maxPopupWidth
     )
-    readonly property real arcImplicitHeight: (Kirigami.Units.gridUnit * 1.3) + (Kirigami.Units.smallSpacing * 2)
+    readonly property real arcImplicitHeight: (Kirigami.Units.gridUnit * 1.6) + (Kirigami.Units.smallSpacing * 2)
 
     // ── Hover open/close ──────────────────────────────────────────────────────
 
@@ -79,6 +79,7 @@ PlasmoidItem {
     property bool pillHovered: false
     property bool arcHovered: false
     property bool arcLockedOpen: false
+    property bool popupOpen: false
     readonly property bool contextMenuOpen: nodeContextMenu.menuOpen
 
     // 300 ms hold on pill before arc opens
@@ -235,27 +236,63 @@ PlasmoidItem {
         mainItem: Loader {
             id: arcLoader
             width: Math.min(root.arcImplicitWidth, root.maxPopupWidth)
-            height: root.arcImplicitHeight
+            height: root.arcImplicitHeight + Kirigami.Units.smallSpacing
             active: arcPopup.visible
             asynchronous: false
 
-            sourceComponent: OrbitArc {
+            sourceComponent: Item {
+                width: arcLoader.width
+                height: arcLoader.height
+
+                OrbitArc {
+                    id: centeredArc
+                    anchors.centerIn: parent
+                    width: Math.min(implicitWidth, parent.width)
+                    height: Math.min(implicitHeight, parent.height)
+
+                    tasksModel: root.tasksModel
+                    activeIndex: root.activeIndex
+                    otherCount: root.otherCount
+                    step: root.arcStepPx
+                    nodeGap: Kirigami.Units.smallSpacing
+                    open: arcLoader.active && arcPopup.visible
+
+                    onHoverEnter: root.onArcEnter()
+                    onHoverLeave: root.onArcLeave()
+                    onActivate: (row) => { root.activateRow(row); root.arcOpen = false; }
+                    onClose: (row) => root.closeRow(row)
+                    onContextMenu: (row, sourceItem) => root.showNodeContextMenu(row, sourceItem)
+                }
+            }
+        }
+    }
+
+    // WindowPopup for showing grouped windows when orbitGroupCount > orbitCount
+    PlasmaCore.Dialog {
+        id: windowPopup
+        visualParent: pill
+        flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
+        backgroundHints: PlasmaCore.Types.NoBackground
+        location: switch (Plasmoid.location) {
+            case PlasmaCore.Types.TopEdge:   return PlasmaCore.Types.TopEdge
+            case PlasmaCore.Types.LeftEdge:  return PlasmaCore.Types.LeftEdge
+            case PlasmaCore.Types.RightEdge: return PlasmaCore.Types.RightEdge
+            default:                         return PlasmaCore.Types.BottomEdge
+        }
+
+        mainItem: Loader {
+            id: windowPopupLoader
+            width: Math.min(root.arcImplicitWidth, root.maxPopupWidth)
+            height: root.arcImplicitHeight
+            active: windowPopup.visible
+            asynchronous: false
+
+            /* sourceComponent: WindowPopup {
                 width: parent.width
                 height: parent.height
 
-                tasksModel: root.tasksModel
-                activeIndex: root.activeIndex
-                otherCount: root.otherCount
-                step: root.arcStepPx
-                //contentWidth: (root.arcStepPx * Math.max(root.otherCount, 1)) + 4
-                open: arcLoader.active && arcPopup.visible
-
-                onHoverEnter: root.onArcEnter()
-                onHoverLeave: root.onArcLeave()
-                onActivate: (row) => { root.activateRow(row); root.arcOpen = false; }
-                onClose: (row) => root.closeRow(row)
-                onContextMenu: (row, sourceItem) => root.showNodeContextMenu(row, sourceItem)
-            }
+                grouped: arcLoader.item ? arcLoader.item.groupedNodes : []
+            } */
         }
     }
 }
