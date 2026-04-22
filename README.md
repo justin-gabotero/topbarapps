@@ -4,6 +4,8 @@
   ./reinstall.sh 
 ```
 
+![Screenshot 05/22/26](/pictures/image.png)
+
 todo:
 - [x] fix the sizing issue
 - [x] only two items are showing in the arc even if there are more than two items in taskmanager. (most likely related to the sizing issue)
